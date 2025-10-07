@@ -1,0 +1,7 @@
+# SSL cert/key files
+*.key
+*.csr
+*.crt
+*.pem
+*.key.enc
+*.srl

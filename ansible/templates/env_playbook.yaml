@@ -1,0 +1,50 @@
+---
+- name: Set environment variables
+  hosts: windows
+
+  vars:
+    rez_path: P:\somewhere\rezplex\packages;P:\somewhere\rezplex\system;
+    rez_script: C:\opt\rez\Scripts\rez;
+
+  tasks:
+    - name: Set rez packages path
+      win_environment:
+        name: REZ_PACKAGES_PATH
+        value: "{{ rez_path }}"
+        state: present
+        level: machine
+      tags: rez_environment
+
+    - name: Add rez script variable
+      block:
+        - name: Get current Path environment variable value
+          win_shell: $env:Path
+          register: current_path
+
+        - name: Print current Path value
+          debug:
+            msg: "{{ current_path.stdout }}"
+
+        - name: Check if rez_script is already in Path
+          set_fact:
+            rez_script_in_path: "{{ rez_script in current_path.stdout }}"
+
+        - name: Append new value to current Path value if not already present
+          set_fact:
+            new_path: "{{ current_path.stdout | regex_replace('\\r\n', '') }};{{ rez_script }}"
+          when: rez_script_in_path == False
+
+        - name: Print new Path value
+          debug:
+            msg: "{{ new_path }}"
+          when: rez_script_in_path == False
+
+        - name: Set Path environment variable with new value if changed
+          win_environment:
+            name: Path
+            value: "{{ new_path }}"
+            state: present
+            level: machine
+          when: rez_script_in_path == False
+      tags: rez_script
+...

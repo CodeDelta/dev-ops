@@ -1,0 +1,9 @@
+*.py[cod]
+
+# remove virtual environments files
+Lib/*
+Scripts/*
+pyvenv*
+
+# Libraries that are installed through pip by the setup process
+libs/*

@@ -1,0 +1,94 @@
+services:
+  # GitLab service
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    hostname: dmz-gitlab
+    container_name: gitlab
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'https://gitlab.your_domain.com'
+        gitlab_rails['time_zone'] = 'Asia/Seoul'
+        letsencrypt['enable'] = false
+        nginx['ssl_certificate'] = "/etc/gitlab/ssl/*_place_holder.crt"
+        nginx['ssl_certificate_key'] = "/etc/gitlab/ssl/*_place_holder.key"
+        nginx['redirect_http_to_https'] = true
+        nginx['redirect_http_to_https_port'] = 80
+        # Configure GitLab's internal Nginx to use only port 80.
+        nginx['listen_port'] = 80
+        # Let the reverse proxy handle HTTPS.
+        nginx['listen_https'] = false
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+      - ./ssl/common:/etc/gitlab/ssl
+    ports:
+      - "22:22"
+    networks:
+      - services_network
+    restart: always
+
+  gitlab_runner:
+    image: gitlab/gitlab-runner:latest
+    hostname: runner
+    container_name: gitlab_runner
+    profiles:
+      - runner
+    restart: always
+    depends_on:
+      - gitlab
+    volumes:
+      - ./gitlab_runner/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./ssl/common/*_place_holder.crt:/etc/gitlab-runner/certs/gitlab.your_domain.com.crt
+    networks:
+      - services_network
+
+  # Nexus servicec
+  nexus:
+    image: sonatype/nexus3:latest
+    container_name: nexus
+    volumes:
+      - nexus-data:/nexus-data
+      - ./ssl/jks:/opt/sonatype/nexus/etc/ssl
+    environment:
+      INSTALL4J_ADD_VM_PARAMS: >-
+        -Xms2703m -Xmx2703m
+        -XX:MaxDirectMemorySize=2703m
+        -Djava.util.prefs.userRoot=/nexus-data/javaprefs
+        -Djavax.net.ssl.keyStore=/opt/sonatype/nexus/etc/ssl/keystore.jks
+        -Djavax.net.ssl.keyStorePassword=password_place_holder
+        -Djavax.net.ssl.trustStore=/opt/sonatype/nexus/etc/ssl/truststore.jks
+        -Djavax.net.ssl.trustStorePassword=password_place_holder
+        -Dnexus.analytics.enabled=false
+        -Dnexus.outreach.enabled=false
+        -Dnexus.telemetry.enabled=false
+    networks:
+      - services_network
+    restart: unless-stopped
+
+  # Reverse proxy service
+  nginx-proxy:
+    image: nginx:latest
+    container_name: nginx_reverse_proxy
+    volumes:
+      - ./proxy/conf.d:/etc/nginx/conf.d
+      - ./ssl/common:/etc/nginx/ssl
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - gitlab
+      - nexus
+    networks:
+      - services_network
+    restart: unless-stopped
+
+networks:
+  services_network:
+
+volumes:
+  nexus-data:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:

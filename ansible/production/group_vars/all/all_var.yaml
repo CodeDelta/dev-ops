@@ -1,0 +1,3 @@
+ansible_port: 5838
+ansible_user: domain\user_name
+ansible_password: place_holder

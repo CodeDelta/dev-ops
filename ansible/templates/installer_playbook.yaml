@@ -1,0 +1,18 @@
+---
+- name: Run install_connect.ps1
+  hosts: windows
+
+  tasks:
+    - name: Copy install_connect.ps1 to Windows host
+      copy:
+        content: "{{ lookup('file', 'install_connect.ps1') }}"
+        dest: C:\Windows\Temp\install_connect.ps1
+
+    - name: Run install_connect.ps1
+      win_shell: powershell.exe -File C:\Windows\Temp\install_connect.ps1
+      register: result
+
+    - name: Print result
+      debug:
+        var: result
+...

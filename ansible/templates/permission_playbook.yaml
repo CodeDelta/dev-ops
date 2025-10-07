@@ -1,0 +1,25 @@
+---
+- name: Set permissions on a file
+  hosts: windows
+
+  vars:
+    tde_folders:
+      - C:\Program Files\3DE4_win64_r8.0\sys_data\py_scripts
+      - C:\Program Files\3DE4_win64_r8.0\sys_data\py39_inst\Scripts
+      - C:\Program Files\3DE4_win64_r8.0\sys_data\py39_inst\Lib\site-packages
+    target_user: cgextra
+
+  tasks:
+    - name: Add read and write permissions
+      win_acl:
+        path: "{{ item }}"
+        user: "{{ target_user }}"
+        rights: FullControl
+        type: allow
+        state: present
+        propagation: 'None'
+      loop: "{{ tde_folders }}"
+      loop_control:
+        loop_var: item
+      tags: tde_setup
+...

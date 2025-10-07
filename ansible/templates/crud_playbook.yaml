@@ -1,0 +1,92 @@
+---
+- name: Create folder on Windows hosts
+  hosts: windows
+
+  vars:
+    test_folders:
+      - C:\work\test_ansible
+      - C:\work\test_ansible2
+      - C:\work\test_ansible3
+
+  tasks:
+    - name: File CRUD test
+      block:
+      - name: Create single folder
+        win_file:
+          path: "{{ test_folders[0] }}"
+          state: directory
+
+      - name: Create multiple folder
+        win_file:
+          path: "{{ item }}"
+          state: directory
+        loop: "{{ test_folders }}"
+
+      - name: Create a file
+        win_file:
+          path: "{{ test_folders[0] }}\\txt_file.txt"
+          state: touch
+
+      - name: Update foo file with content (overwrite)
+        win_copy:
+          content: "this is windows foo file"
+          dest: "{{ test_folders[0] }}\\foo.txt"
+
+      - name: Copy foo file to foo2 file
+        win_copy:
+          src: "{{ test_folders[0] }}\\foo.txt"
+          dest: "{{ test_folders[0] }}\\foo2.txt"
+          remote_src: yes
+
+      - name: Read file content
+        slurp:
+          src: "{{ test_folders[0] }}\\foo.txt"
+        register: file_content
+
+      - name: Print file content
+        debug:
+          msg: "{{ file_content['content'] | b64decode }}"
+
+      - name: Delete multiple Files
+        win_file:
+          path: "{{ item }}"
+          state: absent
+        loop: "{{ test_folders }}"
+      tags: file_crud
+
+    - name: Retrive file or folder
+      block:
+      - name: Create single folder
+        win_file:
+          path: "{{ test_folders[0] }}"
+          state: directory
+
+      - name: Create foo files
+        win_file:
+          path: "{{ item }}"
+          state: touch
+        loop:
+          - C:\work\test_ansible\foo.txt
+          - C:\work\test_ansible\foo2.txt
+          - C:\work\test_ansible\foo3.txt
+
+      - name: Find single file
+        win_stat:
+          path: C:\work\test_ansible\foo.txt
+        register: file_status
+
+      - name: Print single file status
+        debug:
+          msg: "{{ 'File exists' if file_status.stat.exists else 'File does not exist' }}"
+
+      - name: Find multiple files
+        win_find:
+          paths: C:\work\test_ansible
+          patterns: "*.txt"
+        register: found_files
+
+      - name: Print multiple files results
+        debug:
+          msg: "{{ found_files.files | map(attribute='path') | join(', ') }}"
+      tags: file_check
+...

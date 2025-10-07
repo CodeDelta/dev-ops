@@ -1,0 +1,139 @@
+---
+- name: Ftrack Connect Installer
+  hosts: windows
+
+  vars:
+    rez_path: P:\somewhere\rezplex\packages;P:\somewhere\rezplex\system;
+    rez_script: C:\opt\rez\Scripts\rez;
+    connect_location: "C:\\Program Files (x86)\\ftrack Connect"
+    connect_intended_version: "24.11.1"
+    connect_installation_file: "/home/pipe/work/ansible/4dplex_ftrack_connect-{{ connect_intended_version }}-win64.exe"
+    connect_copy_path: "C:\\work\\4dplex_ftrack_connect-{{ connect_intended_version }}-win64.exe"
+
+  tasks:
+    - name: Set rez packages env path
+      win_environment:
+        name: REZ_PACKAGES_PATH
+        value: "{{ rez_path }}"
+        state: present
+        level: machine
+      tags: rez_env_variable
+
+    - name: Add rez script variable to Path
+      block:
+        - name: Get current Path environment variable value
+          win_shell: $env:Path
+          register: current_path
+
+        - name: Print current Path value
+          debug:
+            msg: "{{ current_path.stdout }}"
+
+        - name: Check if rez_script is already in Path
+          set_fact:
+            rez_script_in_path: "{{ rez_script in current_path.stdout }}"
+
+        - name: Append new value to current Path value if not already present
+          set_fact:
+            new_path: "{{ current_path.stdout | regex_replace('\\r\n', '') }};{{ rez_script }}"
+          when: rez_script_in_path == False
+
+        - name: Print new Path value
+          debug:
+            msg: "{{ new_path }}"
+          when: rez_script_in_path == False
+
+        - name: Set rez_script environment variable with new value if changed
+          win_environment:
+            name: Path
+            value: "{{ new_path }}"
+            state: present
+            level: machine
+          when: rez_script_in_path == False
+      tags: rez_script_env_variable
+
+    - name: Ftrack connect install
+      block:
+        - name: Uninstall old ftrack Connect
+          block:
+            - name: Get old ftrack Connect
+              win_shell: |
+                $old_connect_list = Get-Package -Name "*ftrack Connect*" `
+                -AllVersions -ErrorAction SilentlyContinue | Where-Object `
+                {$_.Version -notlike "{{ connect_intended_version }}"}
+                if ($old_connect_list) {
+                  "[" + (@{
+                    'Version' = $old_connect_list.Version
+                    'ProductId' = $old_connect_list.FastPackageReference
+                  } | ConvertTo-Json -Compress) + "]"
+                } else {
+                  "[]"
+                }
+              register: old_connect_result
+
+            - name: Convert string to JSON
+              set_fact:
+                old_versions: "{{ old_connect_result.stdout | trim | from_json }}"
+
+            - name: Kill existing ftrack Connect processes
+              win_shell: |
+                Get-Process | where {$_.Name -like "*ftrack*connect*"} | `
+                Foreach-Object { Stop-Process $_ -Force -ErrorAction SilentlyContinue }
+
+            - name: Uninstall old versions
+              win_package:
+                product_id: "{{ item.ProductId }}"
+                state: absent
+              loop: "{{ old_versions }}"
+              when: old_versions | length > 0
+
+            - name: Remove installation folder
+              win_file:
+                path: "{{ connect_location }}"
+                state: absent
+              when: old_versions | length > 0
+              ignore_errors: yes
+
+            - name: Log folder removal
+              debug:
+                msg: "C:\\Program Files (x86)\\ftrack Connect removed."
+              tags: log
+          tags: ftrack_connect_uninstall
+
+        - name: Install ftrack Connect
+          block:
+            - name: Check if intended version is installed
+              win_shell: |
+                $current_connect = (Get-Package -Name "*ftrack Connect*" `
+                -RequiredVersion "{{ connect_intended_version }}" `
+                -ErrorAction SilentlyContinue)
+                if ($current_connect) { "Installed" } else { "Not installed" }
+              register: current_connect_status
+
+            - name: Creat work directory if it does not exist
+              win_file:
+                path: "C:\\work"
+                state: directory
+
+            - name: Copy installer to local work directory
+              win_copy:
+                src: "{{ connect_installation_file }}"
+                dest: "{{ connect_copy_path }}"
+              when: current_connect_status.stdout_lines[0] == "Not installed"
+
+            - name: Install intended ftrack Connect version
+              win_package:
+                path: "{{ connect_copy_path }}"
+                product_id: "{33D139AD-52FD-4DB4-9D8D-6A66C389117A}"
+                arguments: /VERYSILENT /ALLUSERS /NORESTART
+                state: present
+              when: current_connect_status.stdout_lines[0] == "Not installed"
+
+            - name: Log installation completion
+              debug:
+                msg: "Connect {{ connect_intended_version }} installation done."
+              tags: log
+              when: current_connect_status.stdout_lines[0] == "Not installed"
+          tags: ftrack_connect_install
+      tags: ftrack_connect
+...

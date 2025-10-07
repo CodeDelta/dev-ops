@@ -1,0 +1,13 @@
+services:
+ gitlab-runner:
+    build:
+      context: .
+    hostname: runner
+    container_name: gitlab-runner
+    restart: always
+    volumes:
+      - ./gitlab_runner/config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./ssl/common/star_domain.crt:/etc/gitlab-runner/certs/gitlab.domain.com.crt
+    environment:
+      - ENABLE_GPU=true

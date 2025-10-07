@@ -1,0 +1,14 @@
+[windows]
+test1 ansible_host=123.456.7.12 ansible_user=test_user ansible_password=place_holder
+test2 ansible_host=123.456.7.14 ansible_user=test_user ansible_password=place_holder
+test3 ansible_host=123.456.7.15 ansible_user=test_user
+test4 ansible_host=123.456.7.16 ansible_user=test_user
+
+[windows:vars]
+ansible_port=5838
+ansible_connection=winrm
+ansible_winrm_scheme=https
+ansible_password=place_holder
+ansible_winrm_transport=ntlm
+ansible_python_interpreter=auto_silent
+ansible_winrm_server_cert_validation=ignore
