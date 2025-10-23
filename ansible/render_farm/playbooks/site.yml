@@ -1,0 +1,4 @@
+- import_playbook: ping.yml
+- import_playbook: mount.yml
+- import_playbook: user.yml
+- import_playbook: muster.yml

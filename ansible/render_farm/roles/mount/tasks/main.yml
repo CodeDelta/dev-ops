@@ -1,0 +1,85 @@
+- name: Install NFS and CIFS utils
+  package:
+    name:
+      - nfs-utils
+      - cifs-utils
+    state: present
+
+- name: Create mount points (skip if already a mountpoint)
+  file:
+    path: "{{ item.path }}"
+    state: directory
+    mode: '0755'
+  loop: "{{ mounts }}"
+  when: item.path not in (ansible_mounts | map(attribute='mount') | list | default([]))
+
+- name: Ensure mounts present and mounted
+  mount:
+    path: "{{ item.path }}"
+    src: "{{ item.src }}"
+    fstype: "{{ item.fstype }}"
+    opts: "{{ item.opts }}"
+    state: mounted
+  loop: "{{ mounts }}"
+
+- name: Build DCC list and expect need flag
+  set_fact:
+    dcc_list: "{{ dccs | dict2items }}"
+    dcc_need_expect: "{{ (dccs | dict2items | selectattr('value.expect','defined') | selectattr('value.expect') | list | length) > 0 }}"
+
+- name: Ensure pexpect for expect module (only if any needs expect)
+  become: true
+  package:
+    name: python3-pexpect
+    state: present
+  when: dcc_need_expect
+
+- name: Ensure install markers directory
+  become: true
+  file:
+    path: /var/lib/render-installs
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Check install marker for each DCC
+  stat:
+    path: "/var/lib/render-installs/{{ item.value.marker }}"
+  loop: "{{ dcc_list }}"
+  register: dcc_markers
+
+- name: Install DCCs (handle expect/shell without zip)
+  become: true
+  block:
+    - name: Install with expect (auto EULA)
+      ansible.builtin.expect:
+        command: /bin/bash -lc 'bash "{{ item.item.value.script }}"'
+        timeout: 1800
+        responses: "{{ item.item.value.responses | default({}) }}"
+      when:
+        - item.item.value.expect | default(false)
+        - not item.stat.exists
+      loop: "{{ dcc_markers.results }}"
+      loop_control:
+        label: "{{ item.item.value.name }}"
+
+    - name: Install with shell
+      ansible.builtin.shell: >
+        /bin/bash -lc 'bash "{{ item.item.value.script }}"'
+      when:
+        - not (item.item.value.expect | default(false))
+        - not item.stat.exists
+      loop: "{{ dcc_markers.results }}"
+      loop_control:
+        label: "{{ item.item.value.name }}"
+
+- name: Create install markers
+  become: true
+  file:
+    path: "/var/lib/render-installs/{{ item.item.value.marker }}"
+    state: touch
+  when: not item.stat.exists
+  loop: "{{ dcc_markers.results }}"
+  loop_control:
+    label: "{{ item.item.value.name }}"

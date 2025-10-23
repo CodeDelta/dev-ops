@@ -1,0 +1,66 @@
+- name: Enforce autoconnect=true only when needed
+  block:
+    - name: Gather active connection UUIDs
+      become: true
+      command: nmcli -t -g UUID connection show --active
+      register: nm_active
+      changed_when: false
+      failed_when: false
+
+    - name: Check autoconnect of active connections
+      become: true
+      command: nmcli -t -g connection.autoconnect connection show {{ item }}
+      loop: "{{ nm_active.stdout_lines | default([]) }}"
+      register: nm_ac_status
+      changed_when: false
+      failed_when: false
+
+    - name: Build list of UUIDs needing fix (autoconnect != yes)
+      set_fact:
+        need_fix_uuids: "{{ nm_ac_status.results | selectattr('stdout','ne','yes') | map(attribute='item') | list }}"
+
+    - name: Map need-fix UUIDs to nmconnection files
+      become: true
+      shell: |
+        grep -l -E "^uuid={{ item }}$" /etc/NetworkManager/system-connections/*.nmconnection 2>/dev/null || true
+      args:
+        executable: /bin/bash
+      loop: "{{ need_fix_uuids }}"
+      register: file_matches
+      changed_when: false
+
+    - name: Build list of connection files to edit
+      set_fact:
+        conn_files_to_edit: "{{ file_matches.results
+          | map(attribute='stdout')
+          | select('match', '^/etc/NetworkManager/system-connections/.+\\.nmconnection$')
+          | list }}"
+
+    - name: Ensure autoconnect=true in those files
+      become: true
+      ini_file:
+        path: "{{ item }}"
+        section: connection
+        option: autoconnect
+        value: 'true'
+        no_extra_spaces: true
+        backup: true
+      loop: "{{ conn_files_to_edit }}"
+      register: ac_edit
+
+    - name: Ensure permissions on connection files (0600 root:root)
+      become: true
+      file:
+        path: "{{ item }}"
+        owner: root
+        group: root
+        mode: '0600'
+      loop: "{{ conn_files_to_edit }}"
+      when: conn_files_to_edit | length > 0
+
+    - name: Restart NetworkManager if any profile changed
+      become: true
+      service:
+        name: NetworkManager
+        state: restarted
+      when: ac_edit is defined and (ac_edit.results | selectattr('changed') | list | length) > 0
