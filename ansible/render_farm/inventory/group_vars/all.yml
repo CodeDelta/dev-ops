@@ -33,3 +33,18 @@ dccs:
     marker: nuke.ok
     expect: false
 
+maya_version: 2026
+maya_python_version: "3.11"
+maya_install_root: "/usr/autodesk"
+maya_site_packages: "{{ maya_install_root }}/maya{{ maya_version }}/lib/python{{ maya_python_version }}/site-packages"
+pymel_cache_dir: "{{ maya_site_packages }}/pymel/cache"
+
+pymel_cache_src_version: 2025
+pymel_cache_dst_version: 2026
+
+pymel_cache_basenames:
+  - mayaApi
+  - mayaCmdsDocs
+  - mayaCmdsExamples
+  - mayaCmdsList
+
