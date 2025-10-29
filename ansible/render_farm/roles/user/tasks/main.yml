@@ -211,3 +211,18 @@
           ansible.builtin.systemd:
             name: "vncserver@:{{ vnc_display }}.service"
             state: started
+
+- name: DCC environment variables setup
+  tags: [dcc]
+  block:
+    - name: Ensure DCC env defaults are set without overriding existing values
+      become: true
+      copy:
+        dest: /etc/profile.d/dcc_env.sh
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          # Managed by Ansible: DCC environment variables
+          # Set only if not already defined
+          export foundry_LICENSE="${foundry_LICENSE:-5300@172.13.3.204}"
