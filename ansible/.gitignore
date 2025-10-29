@@ -7,3 +7,7 @@ pyvenv*
 
 # Libraries that are installed through pip by the setup process
 libs/*
+
+# Ignore files
+**/Muster9.0.14.11632.x64.linux.tar.gz
+**/rez-main.zip
