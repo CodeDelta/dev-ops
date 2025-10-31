@@ -1,66 +1,51 @@
-- name: Enforce autoconnect=true only when needed
+- name: Enforce autoconnect=true for the active ethernet connection
   block:
-    - name: Gather active connection UUIDs
+    - name: Get the name of the active, non-loopback device
       become: true
-      command: nmcli -t -g UUID connection show --active
-      register: nm_active
+      command: nmcli -t --fields DEVICE connection show --active
+      register: nm_active_devices_raw
       changed_when: false
-      failed_when: false
 
-    - name: Check autoconnect of active connections
-      become: true
-      command: nmcli -t -g connection.autoconnect connection show {{ item }}
-      loop: "{{ nm_active.stdout_lines | default([]) }}"
-      register: nm_ac_status
-      changed_when: false
-      failed_when: false
-
-    - name: Build list of UUIDs needing fix (autoconnect != yes)
+    - name: Extract the primary active device name
       set_fact:
-        need_fix_uuids: "{{ nm_ac_status.results | selectattr('stdout','ne','yes') | map(attribute='item') | list }}"
+        active_device_name: "{{ (nm_active_devices_raw.stdout_lines | reject('match', '^lo$') | list | first) | default('') }}"
+      changed_when: false
 
-    - name: Map need-fix UUIDs to nmconnection files
+    - name: Skip if no active non-loopback device is found
+      debug:
+        msg: "No active, non-loopback network device found. Skipping."
+      when: active_device_name == ""
+
+    - name: Find the nmconnection file for the active device
       become: true
       shell: |
-        grep -l -E "^uuid={{ item }}$" /etc/NetworkManager/system-connections/*.nmconnection 2>/dev/null || true
+        grep -l -E "^interface-name={{ active_device_name }}$" /etc/NetworkManager/system-connections/*.nmconnection 2>/dev/null || true
       args:
         executable: /bin/bash
-      loop: "{{ need_fix_uuids }}"
-      register: file_matches
+      register: file_match
       changed_when: false
+      when: active_device_name != ""
 
-    - name: Build list of connection files to edit
+    - name: Set path for the connection file to edit
       set_fact:
-        conn_files_to_edit: "{{ file_matches.results
-          | map(attribute='stdout')
-          | select('match', '^/etc/NetworkManager/system-connections/.+\\.nmconnection$')
-          | list }}"
+        conn_file_to_edit: "{{ file_match.stdout }}"
+      when: file_match.stdout is defined and file_match.stdout != ""
 
-    - name: Ensure autoconnect=true in those files
+    - name: Ensure autoconnect=true in the active connection file
       become: true
       ini_file:
-        path: "{{ item }}"
+        path: "{{ conn_file_to_edit }}"
         section: connection
         option: autoconnect
         value: 'true'
         no_extra_spaces: true
         backup: true
-      loop: "{{ conn_files_to_edit }}"
       register: ac_edit
+      when: conn_file_to_edit is defined and conn_file_to_edit != ""
 
-    - name: Ensure permissions on connection files (0600 root:root)
-      become: true
-      file:
-        path: "{{ item }}"
-        owner: root
-        group: root
-        mode: '0600'
-      loop: "{{ conn_files_to_edit }}"
-      when: conn_files_to_edit | length > 0
-
-    - name: Restart NetworkManager if any profile changed
+    - name: Restart NetworkManager if the profile changed
       become: true
       service:
         name: NetworkManager
         state: restarted
-      when: ac_edit is defined and (ac_edit.results | selectattr('changed') | list | length) > 0
+      when: ac_edit.changed
