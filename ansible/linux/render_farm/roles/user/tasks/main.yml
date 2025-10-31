@@ -226,3 +226,32 @@
           # Managed by Ansible: DCC environment variables
           # Set only if not already defined
           export foundry_LICENSE="${foundry_LICENSE:-5300@172.13.3.204}"
+
+- name: Install chrome browser
+  tags: [chrome]
+  block:
+    - name: Copy Google Chrome RPM to work directory
+      copy:
+        src: google-chrome-stable_current_x86_64.rpm
+        dest: "/home/{{ muster_user }}/work/google-chrome-stable_current_x86_64.rpm"
+        owner: "{{ muster_user }}"
+        group: "{{ muster_user }}"
+        mode: '0644'
+
+    - name: Install Google Chrome from RPM
+      become: true
+      dnf:
+        name: "/home/{{ muster_user }}/work/google-chrome-stable_current_x86_64.rpm"
+        state: present
+        disable_gpg_check: yes
+
+    - name: Verify Chrome installation
+      command: google-chrome --version
+      register: chrome_version
+      changed_when: false
+      failed_when: false
+
+    - name: Display Chrome version
+      debug:
+        msg: "Google Chrome installed: {{ chrome_version.stdout }}"
+      when: chrome_version.rc == 0
