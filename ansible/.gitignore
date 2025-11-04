@@ -12,3 +12,5 @@ libs/*
 **/Muster9.0.14.11632.x64.linux.tar.gz
 **/rez-main.zip
 **/google-chrome-stable_current_x86_64.rpm
+**/rocketchat-4.9.1-linux-x86_64.rpm
+**/*.crt

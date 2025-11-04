@@ -287,3 +287,62 @@
       register: vscode_version
       changed_when: false
       failed_when: false
+
+
+- name: Install Rocket.Chat Desktop
+  tags: [rocketchat]
+  block:
+    - name: Copy Rocket.Chat RPM to work directory
+      copy:
+        src: rocketchat-4.9.1-linux-x86_64.rpm
+        dest: "/home/{{ muster_user }}/work/rocketchat-4.9.1-linux-x86_64.rpm"
+        owner: "{{ muster_user }}"
+        group: "{{ muster_user }}"
+        mode: '0644'
+
+    - name: Install Rocket.Chat from RPM
+      become: true
+      dnf:
+        name: "/home/{{ muster_user }}/work/rocketchat-4.9.1-linux-x86_64.rpm"
+        state: present
+        disable_gpg_check: yes
+
+    - name: Ensure ca-certificates installed (for trust store)
+      become: true
+      package:
+        name: ca-certificates
+        state: present
+
+    - name: Set hosts entry for Rocket.Chat
+      become: true
+      lineinfile:
+        path: /etc/hosts
+        regexp: '^\s*172\.13\.3\.206\s+rocketchat\.4dplexvfx\.com\s*$'
+        line: '172.13.3.206  rocketchat.4dplexvfx.com'
+        state: present
+        backup: true
+
+    - name: Copy root CA certificate for Rocket.Chat
+      become: true
+      copy:
+        src: rootca.crt
+        dest: /etc/pki/ca-trust/source/anchors/rocketchat-root.crt
+        owner: root
+        group: root
+        mode: '0644'
+      register: rocketchat_ca
+
+    - name: Update CA trust (only if CA changed)
+      become: true
+      command: update-ca-trust extract
+      when: rocketchat_ca.changed
+
+    - name: Verify Rocket.Chat installation
+      command: bash -lc "rpm -qa | egrep -i 'rocketchat(-desktop)?'"
+      register: rocketchat_pkg
+      changed_when: false
+      failed_when: rocketchat_pkg.rc != 0
+
+    - name: Show installed Rocket.Chat package
+      debug:
+        msg: "{{ rocketchat_pkg.stdout_lines | default([]) | join(', ') }}"
